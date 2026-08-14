@@ -1,126 +1,198 @@
-Node.js — Event Loop, Thread Pool & File System
+# Node.js — Event Loop, Thread Pool & File System
 
-1. Node.js Request Flow
+Understanding how Node.js handles requests, asynchronous operations, the Event Loop, Thread Pool, and File System.
 
+---
+
+## 📚 Table of Contents
+
+* [1. Node.js Request Flow](#1-nodejs-request-flow)
+* [2. Client](#2-client)
+* [3. Event Queue](#3-event-queue)
+* [4. Event Loop](#4-event-loop)
+* [5. Blocking vs Non-Blocking](#5-blocking-vs-non-blocking)
+* [6. Thread Pool](#6-thread-pool)
+* [7. Why Blocking Code Can Be a Problem](#7-why-blocking-code-can-be-a-problem)
+* [8. Synchronous vs Asynchronous FS](#8-synchronous-vs-asynchronous-fs)
+* [9. Important Node.js Modules](#9-important-nodejs-modules)
+* [10. File System Examples](#10-file-system-examples)
+* [11. Thread Pool Size](#11-thread-pool-size)
+* [12. Important Terms](#12-important-terms)
+* [13. Complete Architecture](#13-complete-architecture)
+* [14. Main Takeaways](#14-main-takeaways)
+* [15. 30-Second Revision](#15-30-second-revision)
+
+---
+
+# 1. Node.js Request Flow
+
+A simplified view of how a request is handled:
+
+```text
 Client
-   ↓
+  ↓
 Request
-   ↓
+  ↓
 Event Queue
-   ↓
+  ↓
 Event Loop
-   ↓
+  ↓
 ┌──────────────────────┐
 │  Blocking Operation? │
 └──────────┬───────────┘
            │
-     ┌─────┴─────┐
-     ↓           ↓
-    NO          YES
-     ↓           ↓
- Process      Thread Pool
- Directly         ↓
-     ↓        Worker Thread
-     │            ↓
-     │         Result
-     └──────┬─────┘
+      ┌────┴────┐
+      ↓         ↓
+     NO        YES
+      ↓         ↓
+ Process     Thread Pool
+ Directly        ↓
+      ↓      Worker Thread
+      │          ↓
+      │        Result
+      └─────┬────┘
             ↓
          Response
             ↓
           Client
+```
 
-2. Client
+> **Note:** This is a simplified learning diagram. Node.js does not literally place every request into one simple "Event Queue" before the Event Loop.
 
-A client can be:
+---
 
-Web browser
+# 2. Client
 
-Mobile application
+A **client** is something that sends a request to a server.
 
-Another application
+Examples:
 
-The client sends a request to the Node.js server.
+* 🌐 Web browser
+* 📱 Mobile application
+* 💻 Another application
+* 🔌 API client
 
-Client → Server
-
-3. Event Queue
-
-When requests/tasks arrive, they can be placed into a queue for processing.
+```text
+Client
+   ↓
+Request
+   ↓
+Node.js Server
+```
 
 Example:
 
+```text
+Browser → GET /users → Node.js Server
+```
+
+---
+
+# 3. Event Queue
+
+When asynchronous work needs to be handled, callbacks and other tasks are scheduled to be processed by Node.js.
+
+A simplified example:
+
+```text
 Request 1
 Request 2
 Request 3
 Request 4
+```
 
-Generally, queue processing follows FIFO:
+A queue is commonly described using:
 
+```text
+FIFO
+↓
 First In → First Out
+```
 
-First Request → First Processed
+However, Node.js's actual event-loop behavior is more complex than a single FIFO queue because it has different phases and queues for different types of work.
 
-4. Event Loop
+---
 
-The Event Loop continuously manages work that needs to be processed.
+# 4. Event Loop
 
-Main responsibilities:
+The **Event Loop** is one of the most important parts of Node.js.
 
-Pick a task/request.
+It continuously checks for work that can be processed.
 
-Determine what type of operation it involves.
+### Main responsibilities
 
-Handle non-blocking work.
+* Handle callbacks
+* Coordinate asynchronous operations
+* Process timers and I/O-related callbacks
+* Continue executing JavaScript while asynchronous work is pending
+* Coordinate with the underlying system and libuv
 
-Coordinate with the Thread Pool for certain operations.
+Simplified:
 
-Continue handling other work.
-
+```text
 Event Queue
      ↓
-Event Loop
+  Event Loop
+     ↓
+Process Work
+```
 
-5. Blocking vs Non-Blocking
+The main idea is:
+
+> **The Event Loop allows Node.js to handle asynchronous operations without blocking the JavaScript thread for every operation.**
+
+---
+
+# 5. Blocking vs Non-Blocking
 
 This is one of the most important Node.js concepts.
 
-🔴 Blocking / Synchronous
+## 🔴 Blocking / Synchronous
 
-A blocking operation makes the current execution wait until the operation finishes.
+A blocking operation makes the current JavaScript execution wait until the operation finishes.
 
-Example
+### Example
 
+```js
 const fs = require("fs");
 
 const data = fs.readFileSync("./contacts.txt", "utf-8");
 
 console.log(data);
 console.log("Done");
+```
 
-Execution
+### Execution
 
-Read File
-   ↓
- WAIT
-   ↓
+```text
+readFileSync()
+     ↓
+   WAIT
+     ↓
 File Read Complete
-   ↓
+     ↓
 console.log(data)
-   ↓
+     ↓
 console.log("Done")
+```
 
-Remember
+### Remember
 
-Blocking = Wait
+```text
+Blocking = WAIT
+```
 
-The next code cannot execute until the operation finishes.
+The next JavaScript statement cannot execute until the synchronous operation returns.
 
-🟢 Non-Blocking / Asynchronous
+---
 
-A non-blocking operation allows other code to continue while the operation is being completed.
+## 🟢 Non-Blocking / Asynchronous
 
-Example
+A non-blocking operation allows JavaScript execution to continue while the operation is being completed.
 
+### Example
+
+```js
 const fs = require("fs");
 
 fs.readFile("./contacts.txt", "utf-8", (err, data) => {
@@ -133,116 +205,171 @@ fs.readFile("./contacts.txt", "utf-8", (err, data) => {
 });
 
 console.log("Done");
+```
 
-Execution
+### Simplified execution
 
+```text
 readFile()
-   ↓
+     ↓
 Continue execution
-   ↓
+     ↓
 console.log("Done")
-   ↓
+     ↓
 File operation completes
-   ↓
+     ↓
 Callback executes
-   ↓
+     ↓
 console.log(data)
+```
 
-Remember
+### Remember
 
-Non-Blocking = Don't Wait
+```text
+Non-Blocking = DON'T WAIT
+```
 
-6. Thread Pool 🧵
+---
 
-Node.js uses a Thread Pool for certain expensive operations.
+# 6. Thread Pool 🧵
 
-Think of it as a collection of worker threads.
+Node.js uses **libuv**, which provides a Thread Pool for certain operations that cannot be handled entirely by the operating system's asynchronous APIs.
 
-        Thread Pool
-   ┌──────┬──────┬──────┬──────┐
-   │  T1  │  T2  │  T3  │  T4  │
-   └──────┴──────┴──────┴──────┘
+A simplified view:
 
-When an operation requires a worker:
+```text
+             Thread Pool
+       ┌──────┬──────┬──────┬──────┐
+       │  T1  │  T2  │  T3  │  T4  │
+       └──────┴──────┴──────┴──────┘
+```
 
+When an operation uses the Thread Pool:
+
+```text
 Event Loop
-    ↓
+     ↓
 Thread Pool
-    ↓
+     ↓
 Available Worker
-    ↓
+     ↓
 Perform Operation
-    ↓
-Return Result
+     ↓
+Result
+     ↓
+Callback / Promise
+```
 
-7. Why Blocking Code Can Be a Problem
+Examples of operations that can use the libuv Thread Pool include certain:
 
-The Thread Pool has a limited number of workers.
+* File System operations
+* `crypto` operations
+* DNS operations
+* Compression operations
 
-Example:
+---
 
-Worker 1 → User 1
-Worker 2 → User 2
-Worker 3 → User 3
-Worker 4 → User 4
+# 7. Why Blocking Code Can Be a Problem
 
-If all workers are busy:
+The JavaScript execution thread should avoid unnecessary blocking work, especially in a server.
 
-User 5
+For example:
+
+```text
+Request 1
    ↓
- WAIT
+Long Blocking Operation
    ↓
-Worker becomes available
+JavaScript execution is blocked
    ↓
-User 5 is processed
+Other requests have to wait
+```
 
-With many users and expensive operations, this can:
+This can:
 
-Increase waiting time
+* Increase response time
+* Reduce throughput
+* Make the application less responsive
+* Reduce scalability
 
-Reduce scalability
+### Important distinction
 
-Delay other requests
+Do not think of the Thread Pool as meaning that **all blocking JavaScript automatically moves to another thread**.
 
-Rule to Remember
+For example:
 
-For server applications, prefer non-blocking/asynchronous APIs when appropriate.
+```js
+fs.readFileSync()
+```
 
-8. Synchronous vs Asynchronous fs
+is synchronous and blocks the JavaScript thread.
 
-Node.js provides synchronous and asynchronous versions of many fs functions.
+Using a Thread Pool does not magically make synchronous JavaScript non-blocking.
 
-Synchronous
+### Rule to Remember
 
+> For server applications, prefer non-blocking/asynchronous APIs when appropriate.
+
+---
+
+# 8. Synchronous vs Asynchronous FS
+
+Node.js provides synchronous and asynchronous versions of many `fs` operations.
+
+## Synchronous
+
+Examples:
+
+```js
 fs.readFileSync()
 fs.writeFileSync()
 fs.appendFileSync()
+```
 
 Example:
+
+```js
+const fs = require("fs");
 
 const data = fs.readFileSync("./file.txt", "utf-8");
 
 console.log(data);
+```
 
-Key idea
+### Key idea
 
-Operation → WAIT → Result → Continue
+```text
+Start Operation
+      ↓
+    WAIT
+      ↓
+   Result
+      ↓
+Continue
+```
 
-Asynchronous
+---
 
+## Asynchronous
+
+Examples:
+
+```js
 fs.readFile()
 fs.writeFile()
 fs.appendFile()
+```
 
-They can use:
+They can be used with:
 
-Callback
-
-Promise
-
-async/await
+* Callbacks
+* Promises
+* `async/await`
 
 Example:
+
+```js
+const fs = require("fs");
 
 fs.readFile("./file.txt", "utf-8", (err, data) => {
     if (err) {
@@ -252,9 +379,11 @@ fs.readFile("./file.txt", "utf-8", (err, data) => {
 
     console.log(data);
 });
+```
 
-Key idea
+### Key idea
 
+```text
 Start Operation
       ↓
 Continue Other Work
@@ -262,230 +391,317 @@ Continue Other Work
 Operation Completes
       ↓
 Handle Result
+```
 
-9. Important Node.js Built-in Modules
+---
 
-📁 fs — File System
+# 9. Important Node.js Built-in Modules
 
+## 📁 `fs` — File System
+
+```js
 const fs = require("fs");
+```
 
-Used for:
+The `fs` module is used for file-system operations.
 
-Creating files
+It can be used for:
 
-Reading files
+* Creating files
+* Reading files
+* Writing files
+* Appending data
+* Deleting files
+* Copying files
+* Creating directories
+* Getting file information
 
-Writing files
+---
 
-Appending data
+## 💻 `os` — Operating System
 
-Deleting files
-
-Copying files
-
-Creating directories
-
-Checking file information
-
-💻 os — Operating System
-
+```js
 const os = require("os");
+```
 
-Can provide information about:
+The `os` module provides information about the operating system.
 
-Operating system
+It can provide information about:
 
-CPU
-
-System information
+* CPU
+* Platform
+* Architecture
+* Memory
+* Hostname
+* Operating system
 
 Example:
 
+```js
 console.log(os.cpus().length);
+```
 
-10. File System Examples
+---
 
-Write a File
+# 10. File System Examples
+
+## Write a File
+
+```js
+const fs = require("fs");
 
 fs.writeFileSync("./test.txt", "Hello World");
+```
 
-Read a File
+---
+
+## Read a File
+
+```js
+const fs = require("fs");
 
 const data = fs.readFileSync("./test.txt", "utf-8");
 
 console.log(data);
+```
 
-Append to a File
+---
+
+## Append to a File
+
+```js
+const fs = require("fs");
 
 fs.appendFileSync("./test.txt", "\nNew Entry");
+```
 
-Delete a File
+---
+
+## Delete a File
+
+```js
+const fs = require("fs");
 
 fs.unlinkSync("./test.txt");
+```
 
-Copy a File
+---
+
+## Copy a File
+
+```js
+const fs = require("fs");
 
 fs.copyFileSync("./test.txt", "./copy.txt");
+```
 
-Create a Directory
+---
+
+## Create a Directory
+
+Asynchronous example:
+
+```js
+const fs = require("fs");
 
 fs.mkdir("./docs", (err) => {
-    if (err) console.log(err);
+    if (err) {
+        console.log(err);
+        return;
+    }
+
+    console.log("Directory created");
 });
+```
 
-11. Thread Pool Size
+---
 
-The libuv Thread Pool has a default size of:
+# 11. Thread Pool Size
 
+The **libuv Thread Pool** has a default size of:
+
+```text
 4 workers
+```
 
-It can be configured using:
+The size can be configured using:
 
+```text
 UV_THREADPOOL_SIZE
+```
 
-CPU information can be checked using:
+Example:
 
+```bash
+UV_THREADPOOL_SIZE=8 node index.js
+```
+
+> On Windows, the syntax for setting an environment variable is different depending on the shell.
+
+---
+
+## CPU Cores vs Thread Pool
+
+These are **not the same thing**.
+
+CPU information:
+
+```js
 const os = require("os");
 
 console.log(os.cpus().length);
+```
 
-Important: Thread Pool size and CPU core count are not the same thing.
+This tells you the number of logical CPU processors reported by the operating system.
 
-12. Important Terms
+The libuv Thread Pool size is a separate setting.
 
-Term
+```text
+CPU Cores ≠ libuv Thread Pool Size
+```
 
-Meaning
+---
 
-Client
+# 12. Important Terms
 
-Sends requests to the server
+| Term              | Meaning                                                           |
+| ----------------- | ----------------------------------------------------------------- |
+| **Client**        | Sends requests to the server                                      |
+| **Event Queue**   | Simplified concept for work waiting to be processed               |
+| **Event Loop**    | Coordinates JavaScript callbacks and asynchronous work            |
+| **Blocking**      | Execution waits for an operation                                  |
+| **Non-Blocking**  | Execution can continue while asynchronous work is pending         |
+| **Synchronous**   | Operation completes before the next statement continues           |
+| **Asynchronous**  | Result is handled later                                           |
+| **Thread Pool**   | Collection of worker threads used by libuv for certain operations |
+| **Worker Thread** | Performs work assigned through the Thread Pool                    |
+| **Callback**      | Function executed after an asynchronous operation completes       |
 
-Event Queue
+---
 
-Holds tasks/requests waiting to be handled
+# 13. Complete Architecture
 
-Event Loop
+A simplified architecture:
 
-Manages tasks and asynchronous work
+```text
+                         CLIENT
+                            │
+                            ▼
+                         REQUEST
+                            │
+                            ▼
+                    ┌──────────────┐
+                    │ Event Loop / │
+                    │ Node Runtime │
+                    └───────┬──────┘
+                            │
+                   ┌────────┴────────┐
+                   │                 │
+                   ▼                 ▼
+            Non-Blocking        Thread Pool
+               Work                 │
+                   │                ▼
+                   │          Worker Thread
+                   │                │
+                   │                ▼
+                   │             Result
+                   │                │
+                   └────────┬───────┘
+                            ▼
+                       Callback /
+                        Promise
+                            │
+                            ▼
+                        RESPONSE
+                            │
+                            ▼
+                          CLIENT
+```
 
-Blocking
+> This is a simplified model for learning. The real Node.js architecture includes V8, libuv, OS-level asynchronous I/O, event-loop phases, and multiple internal queues.
 
-Execution waits for an operation
+---
 
-Non-Blocking
-
-Execution can continue while waiting
-
-Synchronous
-
-Operation completes before continuing
-
-Asynchronous
-
-Result is handled later
-
-Thread Pool
-
-Collection of worker threads
-
-Worker Thread
-
-Performs assigned work
-
-Callback
-
-Function executed when an async operation completes
-
-13. Complete Architecture
-
-                    CLIENT
-                       │
-                       ▼
-                    REQUEST
-                       │
-                       ▼
-                ┌─────────────┐
-                │ Event Queue │
-                └──────┬──────┘
-                       │
-                       ▼
-                  ┌───────────┐
-                  │ Event Loop│
-                  └─────┬─────┘
-                        │
-              ┌─────────┴─────────┐
-              │                   │
-              ▼                   ▼
-       Non-Blocking            Blocking
-              │                   │
-              ▼                   ▼
-       Process/Callback       Thread Pool
-                                  │
-                                  ▼
-                            Worker Thread
-                                  │
-                                  ▼
-                               Result
-              │                   │
-              └─────────┬─────────┘
-                        ▼
-                    RESPONSE
-                        │
-                        ▼
-                      CLIENT
-
-14. ⭐ Main Takeaways
+# 14. ⭐ Main Takeaways
 
 Remember these points:
 
-Node.js uses an event-driven architecture.
+* Node.js uses an **event-driven architecture**.
+* JavaScript execution runs primarily on a **single main thread**.
+* The **Event Loop** coordinates asynchronous JavaScript work.
+* **Blocking operations** make the current JavaScript execution wait.
+* **Non-blocking operations** allow JavaScript to continue while asynchronous work is pending.
+* Some operations use the **libuv Thread Pool**.
+* The default libuv Thread Pool size is generally **4**.
+* `fs` is used for **File System operations**.
+* `os` provides **Operating System information**.
+* Node.js provides both **synchronous and asynchronous APIs**.
+* For server applications, prefer **non-blocking/asynchronous APIs when appropriate**.
+* **CPU core count and Thread Pool size are separate concepts.**
 
-Requests/tasks are managed through the Event Loop.
+---
 
-Blocking operations make execution wait.
+# 15. 📌 30-Second Revision
 
-Non-blocking operations allow other work to continue.
-
-Certain expensive operations use the Thread Pool.
-
-The default libuv Thread Pool size is generally 4.
-
-fs is used for file-system operations.
-
-os provides operating-system and CPU information.
-
-Node.js provides both synchronous and asynchronous APIs.
-
-For server applications, prefer non-blocking/asynchronous APIs when appropriate.
-
-15. 📌 30-Second Revision
-
+```text
 CLIENT
-  ↓
+   ↓
 REQUEST
-  ↓
-EVENT QUEUE
-  ↓
+   ↓
+NODE.JS
+   ↓
 EVENT LOOP
-  ↓
-Is operation blocking?
-  ↓
- ┌─────────────┐
- │             │
-NO            YES
- │             │
- ↓             ↓
-Continue    Thread Pool
- │             ↓
- │          Worker
- │             ↓
- └──────→  Result
-             ↓
-          RESPONSE
-             ↓
-           CLIENT
+   ↓
+┌──────────────────────┐
+│ Asynchronous Work?   │
+└──────────┬───────────┘
+           │
+      ┌────┴────┐
+      ↓         ↓
+    Direct    Thread Pool
+      │           ↓
+      │        Worker
+      │           ↓
+      │         Result
+      └─────┬─────┘
+            ↓
+         CALLBACK
+            ↓
+         RESPONSE
+            ↓
+          CLIENT
+```
 
-🧠 Core Idea
+## 🧠 Core Idea
 
-Node.js is designed around event-driven, asynchronous, non-blocking I/O, allowing it to handle many concurrent requests efficiently.
+> **Node.js is designed around an event-driven, asynchronous model. It uses the Event Loop to coordinate JavaScript execution and asynchronous work, while libuv can use a Thread Pool for certain operations.**
+
+---
+
+## 🔥 Easy Memory Trick
+
+```text
+fs.readFileSync()
+      ↓
+    BLOCKING
+      ↓
+     WAIT
+
+fs.readFile()
+      ↓
+ NON-BLOCKING
+      ↓
+ DON'T WAIT
+
+Event Loop
+      ↓
+ Coordinates Work
+
+Thread Pool
+      ↓
+ Worker Threads
+      ↓
+ Certain Operations
+```
+
+**Node.js = Event Loop + Asynchronous I/O + libuv + Thread Pool (for certain operations)**
