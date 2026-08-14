@@ -1,0 +1,7 @@
+const math = require("fs")
+// const {add,sub}= require("./math")
+// console.log(math.add(2,5))
+// console.log(math.sub(2,5))
+// console.log(add(2,9))
+// console.log(sub(2,9))
+console.log(math)
