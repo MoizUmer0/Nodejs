@@ -1,15 +1,18 @@
 {
-  "name": "server",
+  "name": "discord-bot",
   "version": "1.0.0",
   "description": "",
   "license": "ISC",
   "author": "",
-  "type": "commonjs",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "discord.js": "^14.27.0",
+    "express": "^5.2.1",
+    "mongoose": "^9.9.3",
+    "nanoid": "^6.0.1"
   }
 }
